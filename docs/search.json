@@ -5,5 +5,12 @@
     "title": "Regional Analysis",
     "section": "",
     "text": "1 Preface\nThis is a quarto book."
+  },
+  {
+    "objectID": "lossiemouth.html",
+    "href": "lossiemouth.html",
+    "title": "2  Lossiemouth",
+    "section": "",
+    "text": "## Geocode the Location\nlibrary(tidygeocoder)\n\nWarning: package 'tidygeocoder' was built under R version 4.3.2\n\nlnglat &lt;- dplyr::tibble(location = \"RAF Lossiemouth\") |&gt;\n  geocode(location, method = \"osm\")\n\nPassing 1 address to the Nominatim single address geocoder\n\n\nQuery completed in: 1 seconds\n\n\n\n## Plot on a Map\nlibrary(leaflet)\nleaflet(lnglat) |&gt;\n  addTiles() |&gt;\n  addPopups(lng = ~long, lat = ~lat, popup = \"RAF Lossiemouth\")\n\n\n\n\n\n\n## Create a Circle\nspdf &lt;- sf::st_as_sf(lnglat, coords = c(\"long\", \"lat\"), crs = 4326)\nspdf |&gt;\n  sf::st_transform(27700) |&gt;\n  sf::st_buffer(5e3) |&gt;\n  sf::st_transform(4326) |&gt;\n  leaflet::leaflet() |&gt; \n  leaflet::addTiles() |&gt;\n  leaflet::addPolygons()\n\n\n\n\n\n\n# Extract the Military Sites within a Bounding Box\nbbox &lt;- spdf |&gt;\n  sf::st_transform(27700) |&gt;\n  sf::st_buffer(5e3) |&gt;\n  sf::st_transform(4326) |&gt;\n  sf::st_bbox() |&gt;\n  as.numeric()\n\nlanduse_military &lt;- osmdata::opq(bbox = bbox) |&gt;  \n  osmdata::add_osm_feature(key = \"landuse\", value = \"military\") |&gt;\n  osmdata::osmdata_sf()\n\nlanduse_military$osm_polygons |&gt;\n  leaflet::leaflet() |&gt;\n  leaflet::addTiles() |&gt;\n  leaflet::addPolygons(label = ~name) \n\n\n\n\n\n```"
   }
 ]
