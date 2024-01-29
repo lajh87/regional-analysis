@@ -1,0 +1,50 @@
+# Lossiemouth
+
+```{r}
+## Geocode the Location
+library(tidygeocoder)
+lnglat <- dplyr::tibble(location = "RAF Lossiemouth") |>
+  geocode(location, method = "osm")
+```
+
+```{r}
+## Plot on a Map
+library(leaflet)
+leaflet(lnglat) |>
+  addTiles() |>
+  addPopups(lng = ~long, lat = ~lat, popup = "RAF Lossiemouth")
+```
+
+```{r}
+## Create a Circle
+spdf <- sf::st_as_sf(lnglat, coords = c("long", "lat"), crs = 4326)
+spdf |>
+  sf::st_transform(27700) |>
+  sf::st_buffer(5e3) |>
+  sf::st_transform(4326) |>
+  leaflet::leaflet() |> 
+  leaflet::addTiles() |>
+  leaflet::addPolygons()
+
+```
+
+```{r}
+# Extract the Military Sites within a Bounding Box
+bbox <- spdf |>
+  sf::st_transform(27700) |>
+  sf::st_buffer(5e3) |>
+  sf::st_transform(4326) |>
+  sf::st_bbox() |>
+  as.numeric()
+
+landuse_military <- osmdata::opq(bbox = bbox) |>  
+  osmdata::add_osm_feature(key = "landuse", value = "military") |>
+  osmdata::osmdata_sf()
+
+landuse_military$osm_polygons |>
+  leaflet::leaflet() |>
+  leaflet::addTiles() |>
+  leaflet::addPolygons(label = ~name) 
+
+```
+```
