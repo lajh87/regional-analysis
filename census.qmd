@@ -1,0 +1,43 @@
+# Census Data
+
+Data is sourced from UK Data Archive.
+
+Scottish output area classifications are available for 2001 and 2011 from
+
+https://borders.ukdataservice.ac.uk/bds.html
+
+Scottish output area for 2021 are not yet available. Further information is likely to be available in Spring 24 from 
+
+https://www.scotlandscensus.gov.uk/about/2022-census/census-outputs-schedule/
+
+```{r}
+shp <- sf::st_read("data-raw/Scotland_gorlac_2001/scotland_gorlac_2001.shp")
+```
+
+
+```{r}
+# Get Lossie Location
+library(tidygeocoder)
+lnglat <- dplyr::tibble(location = "RAF Lossiemouth") |>
+  geocode(location, method = "osm")
+
+# Create a Buffer of 25k Around the Lng Lat
+spdf <- sf::st_as_sf(lnglat, coords = c("long", "lat"), crs = 4326)
+spdf_b <- spdf |>
+  sf::st_transform(27700) |>
+  sf::st_buffer(25e3) 
+
+# Clip the OA to the Buffer
+shp2 <- shp[spdf_b,]
+
+```
+
+```{r}
+# Plot the Results
+library(leaflet)
+shp2 |> 
+  sf::st_transform(4326) |>
+  leaflet() |>
+  addTiles() |>
+  addPolygons()
+```
