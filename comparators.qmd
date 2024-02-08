@@ -1,0 +1,121 @@
+# Comparators
+
+Lossiemouth is a coastal town in Scotland between the cities of Inverness and Aberdeen
+
+Some other coastal towns between Inverness and Aberdeen include:
+
+```{r}
+town_geo <- paste(
+  c("Lossiemouth", "Dalcross", "Nairn", "Forres", "Kinloss", "Buckie", "Cullen",
+  "Portsoy", "Banff", "Crovie", "Fraserburgh", "Rattray", "Peterhead","Boddam", 
+  "Cruden Bay", "Newburgh", "Balmedie"),
+  ", Scotland", 
+  sep = "") |> 
+  tidygeocoder::geo()
+
+```
+
+```{r}
+town_geo_sf <- sf::st_as_sf(town_geo, coords = c("long", "lat"), crs = 4326)
+
+leaflet::leaflet(town_geo_sf) |>
+  leaflet::addTiles() |>
+  leaflet::addMarkers()
+```
+
+```{r}
+town_geo_sf_buffer <- town_geo_sf |>
+  sf::st_transform(27700) |>
+  sf::st_buffer(dist = 2.5e3) |>
+  sf::st_transform(4326) 
+
+leaflet::leaflet(town_geo_sf_buffer)|>
+  leaflet::addTiles() |>
+  leaflet::addPolygons()
+
+```
+
+```{r}
+db <- DBI::dbConnect(
+    RPostgres::Postgres(),
+    db = "census", 
+    host = "localhost", 
+    port = 5432,
+    user = "postgres", 
+    password = Sys.getenv("postgre_pw")
+  )
+
+town_geo_sf_buffer <- town_geo_sf |>
+  sf::st_transform(27700) |>
+  sf::st_buffer(dist = 2.5e3)
+
+bbox_df <- seq_along(town_geo_sf_buffer$geometry) |> 
+  purrr::map(~{
+  town_geo_sf_buffer$geometry[.x] |>
+    sf::st_bbox()
+}) |>
+  dplyr::bind_rows() |>
+  dplyr::mutate(address = town_geo_sf_buffer$address)
+
+
+query_bounding_box <- function(bbox, tbl = "ew_msoa_2021", srid = 27700){
+  
+  glue::glue("SELECT * FROM {tbl}
+    WHERE  geometry 
+    && 
+      ST_MakeEnvelope (
+        {bbox[1]}, {bbox[2]}, 
+        {bbox[3]}, {bbox[4]}, 
+        {srid})")
+}
+
+
+oa_f <- 1:nrow(bbox_df) |>
+  purrr::map(~{
+    sf::st_read(db, query = query_bounding_box(
+      bbox_df[.x,], 
+      tb = "scotland_oac_2011")
+      ) |>
+      dplyr::mutate(address = bbox_df$address[.x])
+    }) |>
+  dplyr::bind_rows()
+
+oa_f |>
+  sf::st_transform(4326) |>
+  leaflet::leaflet() |>
+  leaflet::addTiles() |>
+  leaflet::addPolygons()
+
+
+
+```
+
+```{r}
+gva <- oa_f |>
+  dplyr::left_join(
+    db |>
+    dplyr::tbl("oa11_lsoa11_msoa11_lad_2017" ) |>
+    dplyr::select(OA11CD, LSOA11CD) |>
+    dplyr::collect(),
+    by = c("code" = "OA11CD")
+  ) |>
+  dplyr::left_join(
+    readxl::read_xlsx("data-raw/uksmallareagvaestimates1998to2021.xlsx", 
+                  sheet = 4, skip = 1),
+    by = c("LSOA11CD" = "DZ code")
+  ) |>
+  dplyr::as_tibble() |>
+  dplyr::select(address, LSOA11CD, `1998`:`2021`) |>
+  dplyr::distinct() |>
+  tidyr::pivot_longer(cols = -c(1:2))
+
+library(ggplot2)
+g <- gva |>
+  dplyr::group_by(address, name) |>
+  dplyr::summarise(mean = mean(value)) |>
+  ggplot() + geom_line(aes(name, mean, colour = address, group = address)) 
+plotly::ggplotly(g)
+DBI::dbDisconnect(db)
+
+```
+

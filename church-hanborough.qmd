@@ -1,0 +1,69 @@
+# Church Hanborough
+
+```{r}
+lonlat <- tidygeocoder::geo("Church Hanborough") |>
+  sf::st_as_sf(coords = c("long", "lat"), crs = 4326)
+
+leaflet::leaflet(lonlat) |>
+  leaflet::addTiles() |>
+  leaflet::addMarkers() |>
+  leaflet::addPolygons(
+    data = lonlat |> 
+    sf::st_transform(27700) |>
+    sf::st_buffer(dist = 750) |> 
+    sf::st_transform(4326)
+    )
+
+```
+
+```{r}
+db <- DBI::dbConnect(
+    RPostgres::Postgres(),
+    db = "census", 
+    host = "localhost", 
+    port = 5432,
+    user = "postgres", 
+    password = Sys.getenv("postgre_pw")
+  )
+
+query_bounding_box <- function(bbox, tbl = "ew_msoa_2021", srid = 27700){
+  
+  glue::glue("SELECT * FROM {tbl}
+    WHERE  geometry 
+    && 
+      ST_MakeEnvelope (
+        {bbox[1]}, {bbox[2]}, 
+        {bbox[3]}, {bbox[4]}, 
+        {srid})")
+}
+
+bbox <- lonlat |> 
+  sf::st_transform(27700) |>
+  sf::st_buffer(dist = 700) |>
+  sf::st_bbox()
+
+
+oa_f <- sf::st_read(db, query = query_bounding_box(bbox, tbl = "infuse_oa_lyr_2011")) |>
+  dplyr::left_join(
+    db |> dplyr::tbl("oa11_lsoa11_msoa11_lad_2017") |>
+      dplyr::collect(),
+    by = c("geo_code" = "OA11CD")
+
+  )
+
+factpal <- leaflet::colorFactor(topo.colors(12), oa_f$OAC11NM)
+
+oa_f |> sf::st_transform(4326) |>
+  leaflet::leaflet() |>
+    leaflet::addTiles() |>
+    leaflet::addPolygons(color  = ~factpal(OAC11NM),
+                         fill = TRUE) |>
+    leaflet::addLegend("bottomright", pal = factpal, values = ~OAC11NM,
+      opacity = 1
+    )
+
+DBI::dbListTables(db)
+
+DBI::dbDisconnect(db)
+
+```

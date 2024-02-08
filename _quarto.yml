@@ -9,6 +9,7 @@ book:
   chapters:
     - index.qmd
     - lossiemouth.qmd
+    - comparators.qmd
 
 bibliography: references.bib
 
